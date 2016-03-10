@@ -11,6 +11,10 @@
 
 package org.eclipse.m2e.core.internal.project;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
 import org.osgi.service.prefs.BackingStoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +56,8 @@ public class ResolverConfigurationIO {
    */
   private static final String P_LIFECYCLE_MAPPING_ID = "lifecycleMappingId";
 
+  private static final String P_PROPERTIES = "properties";
+
   /**
    * Current configuration version value. See {@link #P_VERSION}
    */
@@ -71,6 +77,12 @@ public class ResolverConfigurationIO {
         projectNode.put(P_LIFECYCLE_MAPPING_ID, configuration.getLifecycleMappingId());
       } else {
         projectNode.remove(P_LIFECYCLE_MAPPING_ID);
+      }
+
+      if(configuration.getProperties() != null && !configuration.getProperties().isEmpty()) {
+        projectNode.put(P_PROPERTIES, propertiesAsString(configuration.getProperties()));
+      } else {
+        projectNode.remove(P_PROPERTIES);
       }
 
       try {
@@ -101,7 +113,67 @@ public class ResolverConfigurationIO {
     configuration.setResolveWorkspaceProjects(projectNode.getBoolean(P_RESOLVE_WORKSPACE_PROJECTS, false));
     configuration.setSelectedProfiles(projectNode.get(P_SELECTED_PROFILES, "")); //$NON-NLS-1$
     configuration.setLifecycleMappingId(projectNode.get(P_LIFECYCLE_MAPPING_ID, (String) null));
+    configuration.setProperties(stringAsProperties(projectNode.get(P_PROPERTIES, null)));
     return configuration;
+  }
+
+  private static String propertiesAsString(Properties properties) {
+    StringBuilder props = new StringBuilder();
+    boolean separate = false;
+    for(Object obj : properties.keySet()) {
+      String value = properties.get(obj).toString();
+      String key = obj.toString();
+
+      value = value.replaceAll(";", "$0$0");
+
+      if(separate) {
+        props.append(";");
+      }
+      props.append(key + ">" + value);
+      separate = true;
+    }
+    return props.toString();
+  }
+
+  private static Properties stringAsProperties(String stringProperties) {
+    if(stringProperties == null) {
+      return null;
+    }
+    Properties properties = new Properties();
+
+    List<String> propertiesList = parseWithSeparator(';', stringProperties.toCharArray());
+
+    for(String p : propertiesList) {
+      String[] props1 = p.split(">", 2);
+      properties.put(props1[0], props1[1].replaceAll(";;", ";"));
+    }
+    return properties;
+  }
+
+  private static List<String> parseWithSeparator(char separator, char[] chars) {
+    List<String> properties = new ArrayList<String>();
+    int lastPropIndex = 0;
+    for(int i = 0; i < chars.length; i++ ) {
+      if(chars[i] == separator) {
+
+        if(!(i + 1 < chars.length && chars[i + 1] == separator)) {
+          boolean isSeparator = false;
+          for(int y = i - 1; y >= 0; y-- ) {
+            if(chars[y] != separator) {
+              int indexDiff = i - y - 1;
+              isSeparator = indexDiff % 2 == 0;
+              break;
+            }
+          }
+          if(isSeparator) {
+            properties.add(new String(chars, lastPropIndex, i - lastPropIndex));
+            lastPropIndex = ++i;
+          }
+        }
+      }
+    }
+    properties.add(new String(chars, lastPropIndex, chars.length - lastPropIndex));
+    return properties;
   }
 
 }
